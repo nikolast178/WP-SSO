@@ -11,12 +11,9 @@ Instalation:
 - add the plugin in IPB/IPS
 - add script in wordpress configuration for cookies.
 
+<center>
 /**Enable Cookies*/
 define('COOKIE_DOMAIN', $_SERVER['HTTP_HOST'] );
-/* developers */ 
-define( 'WP_ALLOW_REPAIR', false );
-define( 'WP_DEBUG', true );
-define( 'WP_DEBUG_LOG', true );
-define( 'WP_DEBUG_DISPLAY', false );
+</center>
 
 - done!
