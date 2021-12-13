@@ -1,0 +1,1466 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin name="WordPress SSO" version_long="102002" version_human="1.2.2" author="Stuart Silvester" website="http://ipb.silvesterwebdesigns.com" update_check="http://ipb.silvesterwebdesigns.com/update-check/?app=wordpress"><hooks><hook type="C" class="\IPS\Member" filename="member"><![CDATA[//<?php
+
+/**
+ * WordPress SSO API for IPS
+ * BG-GAMER
+ */
+
+class hook154 extends _HOOK_CLASS_
+{
+	/**
+	 * Add our own column to default fields
+	 */
+	public function __construct()
+	{
+		try
+		{
+			static::$databaseIdFields = array_merge( static::$databaseIdFields, array( 'wordpress_id' ) );
+	
+			parent::__construct();
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Member Sync
+	 *
+	 * @param	string	$method	Method
+	 * @param	array	$params	Additional parameters to pass
+	 * @return	void
+	 */
+	public function memberSync( $method, $params=array() )
+	{
+		try
+		{
+			/* Let normal class do its thing */
+			call_user_func_array( 'parent::memberSync', func_get_args() );
+	
+			if( $method == 'onLogout' AND !empty( \IPS\Settings::i()->wordpress_url ) )
+			{
+				try
+				{
+					$apiResponse = \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp_api.php' )
+												->setQueryString( [ 'api_key' => \IPS\Settings::i()->wordpress_api_key, 'type' => 'logout', 'redirect' => \IPS\Http\Url::internal( '' ) ] )
+												->request()
+												->setHeaders( array( 'Cookie' => \IPS\Session\Front::$wpCookie . '=' . $_COOKIE[ \IPS\Session\Front::$wpCookie ] ) )
+												->get();
+	
+					if( in_array( $apiResponse->httpResponseCode, array( '404', '401', '403' ) ) )
+					{
+						throw new \Exception( 'invalid_request' );
+					}
+	
+					$api = $apiResponse->decodeJson();
+				}
+				catch( \Exception $e )
+				{
+					/* Redirect to Logout */
+					\IPS\Output::i()->redirect( \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp-login.php' )->setQueryString( 'action', 'logout' ) );
+					exit;
+				}
+	
+				/* Redirect to Logout */
+				\IPS\Output::i()->redirect( \IPS\Http\Url::external( str_replace( '&amp;', '&', $api['url'] ) ) );
+				exit;
+			}
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+}]]></hook><hook type="C" class="\IPS\core\extensions\core\MemberForm\BasicInformation" filename="BasicInformationMemberForm"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - MemberForm Hook
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	exit;
+}
+
+class hook2172 extends _HOOK_CLASS_
+{
+	/**
+	 * Action Buttons
+	 *
+	 * @param	\IPS\Member	$member	The Member
+	 * @return	array
+	 */
+	public function actionButtons( $member )
+	{
+		try
+		{
+			$result = parent::actionButtons( $member );
+	
+			if( !isset( $result['actions']['menu'] ) )
+			{
+				return $result;
+			}
+	
+			foreach( $result['actions']['menu'] as $k => $v )
+			{
+				/* If it's sign in as */
+				if( $v['icon'] == 'key' )
+				{
+					unset( $result['actions']['menu'] [$k] );
+				}
+			}
+	
+			return $result;
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+}
+]]></hook><hook type="C" class="\IPS\Session\Front" filename="session"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - IPS4
+ * 
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+class hook155 extends _HOOK_CLASS_
+{
+	/**
+	 * @brief	API data storage
+	 */
+	public $wpData = [];
+
+	/**
+	 * @brief	Cookie name storage
+	 */
+	public static $wpCookie = null;
+
+	/**
+	 * Guess if the user is logged in
+	 *
+	 * This is a lightweight check that does not rely on other classes. It is only intended
+	 * to be used by the guest caching mechanism so that it can check if the user is logged
+	 * in before other classes are initiated.
+	 *
+	 * This method MUST NOT be used for other purposes as it IS NOT COMPLETELY ACCURATE.
+	 *
+	 * @return	bool
+	 */
+	public static function loggedIn()
+	{
+		try
+		{
+			if( parent::loggedIn() )
+			{
+				return TRUE;
+			}
+	
+			if( static::_getWordPressCookie() )
+			{
+				return TRUE;
+			}
+	
+			return FALSE;
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Read Session
+	 *
+	 * @param	string	$sessionId	Session ID
+	 * @return	string
+	 */
+	public function read( $sessionId )
+	{
+		try
+		{
+			/* Let normal class do its thing */
+			$result = call_user_func_array( 'parent::read', func_get_args() );
+	
+			/* WordPress Cookie */
+			$cookieName = $this->_getWordPressCookie();
+	
+			/* Check for the Cookie, log out if logged in here, but not on master */
+			if( $this->member->member_id AND !$cookieName )
+			{
+				$this->_logout();
+				return '';
+			}
+			/* This is a guest session, no WP data to log them in */
+			elseif( !$cookieName )
+			{
+				return $result;
+			}
+	
+			/* Check the cookie is the one we're expecting */
+			if( !$this->_compareWordPressCookie( $cookieName ) )
+			{
+				/* Log out but purposefully continue so the new member can be logged in */
+				$this->_logout();
+			}
+	
+			/* Check the IPS4 session is a valid member */
+			if( $this->member->member_id )
+			{
+				return $result;
+			}
+	
+			/* If we've sent a request in the last 30s, don't send one again */
+			if( isset( \IPS\Request::i()->cookies[ $cookieName . '_ips4_request'] ) )
+			{
+				return $result;
+			}
+	
+			/* Fetch member data from WP API */
+			$this->wpData = $this->_getWordPressData( $cookieName );
+	
+			if( !is_array( $this->wpData ) OR isset( \IPS\Request::i()->cookies['spammer'] ) )
+			{
+				/* Set cookie so we don't send lots of requests */
+				\IPS\Request::i()->setCookie( $cookieName . '_ips4_request', 1, \IPS\DateTime::create()->add( new \DateInterval( 'PT30S' ) ) );
+	
+				$this->_logout();
+				return '';
+			}
+	
+			/* Try loading */
+			$this->member = \IPS\Member::load( $this->wpData['user_id'], 'wordpress_id' );
+	
+			if( !$this->member->member_id )
+			{
+				$this->member = \IPS\Member::load( $this->wpData['email'], 'email' );
+			}
+	
+			/* Get the member group ID */
+			$memberGroups = $this->_getMemberGroups();
+	
+			/* Check display name is correct */
+			if( !empty( $this->wpData['display_name'] ) AND $this->member->name != $this->wpData['display_name'] )
+			{
+				$this->member->name	= $this->wpData['display_name'];
+			}
+	
+			/* Check email address is correct */
+			if( $this->member->email != $this->wpData['email'] )
+			{
+				$this->member->email = $this->wpData['email'];
+			}
+	
+			/* Check the member has a WordPress ID for future look ups */
+			if( !$this->member->wordpress_id AND $this->wpData['user_id'] )
+			{
+				$this->member->wordpress_id	= $this->wpData['user_id'];
+			}
+	
+			/* Check existing group ID (ignore admins) */
+			$primaryGroupId = array_shift( $memberGroups );
+			if( $this->member->member_group_id != $primaryGroupId AND !$this->member->isAdmin() )
+			{
+				$this->member->member_group_id = $primaryGroupId;
+			}
+	
+			/* If enabled, assign the secondary groups */
+			if( \IPS\Settings::i()->wordpress_secondary_groups )
+			{
+				$this->member->mgroup_others = implode( ',', $memberGroups );
+			}
+	
+			/* Spam Service Check */
+			if( !$this->member->member_id AND \IPS\Settings::i()->spam_service_enabled AND $this->member->email )
+			{
+				if( $this->member->spamService() == 4 )
+				{
+					\IPS\Request::i()->setCookie( 'spammer', 1, \IPS\DateTime::create()->add( new \DateInterval( 'P7D' ) ) );
+					return $result;
+				}
+			}
+	
+			/* Save any changes to the member object */
+			$this->member->wordpress_cookie = md5( $_COOKIE[ $cookieName ] );
+			$this->member->save();
+	
+		/* At this point, we're logged in. - We cannot call setMember here because it will not work with PHP 7.1
+		 * -- We cannot call session_regenerate_id() from within the session read.
+		 */
+			$_SESSION['forcedWrite'] = time();
+	
+			/* Make sure session handler saves during write() */
+			$this->save = TRUE;
+	
+			/* For 4.2 we need to do some device management stuff */
+			if( \IPS\Application::load( 'core' )->long_version >= 101100 )
+			{
+				\IPS\Member\Device::loadOrCreate( $this->member )->updateAfterAuthentication( NULL );
+			}
+	
+			/* Reset any logged in member */
+			\IPS\Member::$loggedInMember = $this->member;
+	
+			/* Session read() method MUST return a string, or this can result in PHP errors */
+			return $result;
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Get users member group id based on role mapping
+	 *
+	 * @return	array		Array of IPS4 group ids
+	 */
+	protected function _getMemberGroups()
+	{
+		try
+		{
+			$groups = array();
+			$groupMap = json_decode( \IPS\Settings::i()->wordpress_group_map, TRUE );
+	
+			/* Make sure the role response is in the expected format. - Some customised APIs may not return an array */
+			if( $this->wpData['role'] AND !is_array( $this->wpData['role'] ) )
+			{
+				$this->wpData['role'] = array( $this->wpData['role'] );
+			}
+	
+			/* Any assigned roles? */
+			$roles = ( $this->wpData['role'] AND count( $this->wpData['role'] ) ) ?  $this->wpData['role'] : array();
+	
+			/* Group map */
+			foreach( $roles as $role )
+			{
+				$lowerRole = \mb_strtolower( $role );
+				if( isset( $groupMap[ $lowerRole ] ) )
+				{
+					try
+					{
+						/* Yep, that's a real group */
+						$groups[] = \IPS\Member\Group::load( $groupMap[ $lowerRole ] )->g_id;
+					}
+					catch( \UnderflowException $e ) { }
+				}
+			}
+	
+			/* Still here? default member group for you */
+			if( !count( $groups ) )
+			{
+				return array( \IPS\Settings::i()->member_group );
+			}
+	
+			return $groups;
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Compare WP cookie hash to verify the cookie is for the same member.
+	 *
+	 * @param	string		$cookie		WP Cookie contents
+	 * @return	boolean
+	 */
+	protected function _compareWordPressCookie( $cookie )
+	{
+		try
+		{
+			if( !$this->member->wordpress_cookie )
+			{
+				return FALSE;
+			}
+			elseif( !\IPS\Login::compareHashes( $this->member->wordpress_cookie, md5( $_COOKIE[ $cookie ] ) ) )
+			{
+				return FALSE;
+			}
+	
+			return TRUE;
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Fetch cookie name
+	 *
+	 * @return	boolean|string		FALSE or name of cookie
+	 */
+	protected static function _getWordPressCookie()
+	{
+		try
+		{
+			if( static::$wpCookie !== NULL )
+			{
+				return static::$wpCookie;
+			}
+	
+			if( count( $_COOKIE ) )
+			{
+				foreach( $_COOKIE as $k => $v )
+				{
+					if( \substr( $k, 0, 19 ) === 'wordpress_logged_in' )
+					{
+						return static::$wpCookie = $k;
+					}
+				}
+			}
+	
+			/* No cookie was found */
+			return static::$wpCookie = FALSE;
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Fetch data from our WordPress API
+	 *
+	 * @param	string				$cookie
+	 * @return	boolean|array
+	 */
+	protected function _getWordPressData( $cookie )
+	{
+		try
+		{
+			try
+			{
+				return \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp_api.php' )
+									->setQueryString( [ 'api_key' => \IPS\Settings::i()->wordpress_api_key, 'type' => 'userinfo' ] )
+									->request()
+									->setHeaders( array( 'Cookie' => $cookie . '=' . $_COOKIE[ $cookie ] ) )
+									->get()
+									->decodeJson();
+			}
+			catch( \Exception $ex )
+			{
+				return FALSE;
+			}
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Log the member out of IPS4
+	 *
+	 * @return	void
+	 */
+	protected function _logout()
+	{
+		try
+		{
+			$this->member = new \IPS\Member;
+	
+			\IPS\Request::i()->setCookie( 'member_id', NULL );
+			\IPS\Request::i()->setCookie( 'pass_hash', NULL );
+	
+			/* Set data */
+			$this->data = array_merge(
+										$this->data,
+										array(
+											'member_name'				=> $this->member->name,
+											'seo_name'					=> $this->member->members_seo_name,
+											'member_id'					=> $this->member->member_id,
+											'member_group'				=> \IPS\Settings::i()->guest_group,
+									)
+			);
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+}]]></hook><hook type="C" class="\IPS\core\modules\front\system\settings" filename="settings"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - Account Settings Hook
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+class hook1050 extends _HOOK_CLASS_
+{
+	/**
+	 * Register
+	 *
+	 * @return	void
+	 */
+	protected function _email()
+	{
+		try
+		{
+			if( !empty( \IPS\Settings::i()->wordpress_url ) )
+			{
+				\IPS\Output::i()->redirect( \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp-admin/profile.php' ) );
+				exit;
+			}
+	
+			return parent::_email();
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Password
+	 *
+	 * @return	void
+	 */
+	protected function _password()
+	{
+		try
+		{
+			if( !empty( \IPS\Settings::i()->wordpress_url ) )
+			{
+				\IPS\Output::i()->redirect( \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp-admin/profile.php' ) );
+				exit;
+			}
+	
+			return parent::_password();
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Username
+	 *
+	 * @return	void
+	 */
+	protected function _username()
+	{
+		try
+		{
+			if( !empty( \IPS\Settings::i()->wordpress_url ) )
+			{
+				\IPS\Output::i()->redirect( \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp-admin/profile.php' ) );
+				exit;
+			}
+	
+			return parent::_username();
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+}]]></hook><hook type="C" class="\IPS\core\modules\front\system\register" filename="register"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - Register Hook
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+class hook1051 extends _HOOK_CLASS_
+{
+	/**
+	 * Register
+	 *
+	 * @return	void
+	 */
+	protected function manage()
+	{
+		try
+		{
+			if( !empty( \IPS\Settings::i()->wordpress_url ) )
+			{
+				try
+				{
+					$apiResponse = \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp_api.php' )
+												->setQueryString( [ 'api_key' => \IPS\Settings::i()->wordpress_api_key, 'type' => 'register', 'redirect' => $_SERVER['HTTP_REFERER'] ?: \IPS\Settings::i()->base_url ] )
+												->request()
+												->get();
+	
+					if( in_array( $apiResponse->httpResponseCode, array( '404', '401', '403' ) ) )
+					{
+						throw new \Exception( 'invalid_request' );
+					}
+	
+					$api = $apiResponse->decodeJson();
+				}
+				catch( \Exception $e )
+				{
+					/* Redirect to register - Fallback to default WP URL */
+					\IPS\Output::i()->redirect( \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp-login.php' ) )->setQueryString( array( 'action' => 'register', 'redirect_to' => $_SERVER['HTTP_REFERER'] ?: \IPS\Settings::i()->base_url ) );
+					exit;
+				}
+	
+				/* Redirect to register url */
+				\IPS\Output::i()->redirect( \IPS\Http\Url::external( $api['url'] ) );
+				exit;
+			}
+	
+			parent::manage();
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+}]]></hook><hook type="C" class="\IPS\core\modules\front\system\login" filename="login"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - Login Hook
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+class hook1052 extends _HOOK_CLASS_
+{
+	/**
+	 * Log In
+	 *
+	 * @return	void
+	 */
+	protected function manage()
+	{
+		try
+		{
+			if( !empty( \IPS\Settings::i()->wordpress_url ) )
+			{
+				if( defined( 'WP_SSO_LOGIN_URL' ) )
+				{
+					$url = WP_SSO_LOGIN_URL;
+				}
+				else
+				{
+					$redirect = isset( \IPS\Request::i()->ref ) ? base64_decode( \IPS\Request::i()->ref ) : ( $_SERVER['HTTP_REFERER'] ?: \IPS\Settings::i()->base_url );
+	
+					try
+					{
+						$apiResponse = \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp_api.php' )
+													->setQueryString( [ 'api_key' => \IPS\Settings::i()->wordpress_api_key, 'type' => 'login', 'redirect' => $redirect ] )
+													->request()
+													->get();
+	
+						if( in_array( $apiResponse->httpResponseCode, array( '404', '401', '403' ) ) )
+						{
+							throw new \Exception( 'invalid_request' );
+						}
+	
+						$api = $apiResponse->decodeJson();
+						$url = $api['url'];
+					}
+					catch( \Exception $e )
+					{
+						/* Redirect to login - Fallback to default WP URL */
+						\IPS\Output::i()->redirect( \IPS\Http\Url::external( \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp-login.php' ) )->setQueryString( 'redirect_to', $redirect ) );
+						exit;
+					}
+				}
+	
+				/* Redirect to login URL */
+				\IPS\Output::i()->redirect( \IPS\Http\Url::external( $url ) );
+				exit;
+			}
+	
+			parent::manage();
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+}]]></hook><hook type="S" class="\IPS\Theme\class_core_front_global" filename="frontGlobal"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - Template Hook
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+class hook1053 extends _HOOK_CLASS_
+{
+
+/* !Hook Data - DO NOT REMOVE */
+public static function hookData() {
+ return array_merge_recursive( array (
+  'userBar' =>
+  array (
+    0 =>
+    array (
+      'selector' => '#elSignInLink',
+      'type' => 'replace',
+      'content' => '{{if !empty(\IPS\Settings::i()->wordpress_url)}}
+<li id=\'elSignInLink\'>
+  <a href=\'{url="app=core&module=system&controller=login" seoTemplate="login" protocol="\IPS\Settings::i()->logins_over_https"}\' id=\'elUserSignIn\'>
+    {lang="sign_in"}
+  </a>
+</li>
+{{else}}
+<li id=\'elSignInLink\'>
+  <a href=\'{url="app=core&module=system&controller=login" seoTemplate="login" protocol="\IPS\Settings::i()->logins_over_https"}\' data-ipsMenu-closeOnClick="false" data-ipsMenu id=\'elUserSignIn\'>
+    {lang="sign_in"}  <i class=\'fa fa-caret-down\'></i>
+  </a>
+  {template="loginPopup" app="core" group="global" params="new \IPS\Login( \IPS\Http\Url::internal( \'app=core&module=system&controller=login\', \'front\', \'login\', NULL, \IPS\Settings::i()->logins_over_https ) )"}
+</li>
+{{endif}}',
+    ),
+  ),
+), parent::hookData() );
+}
+/* End Hook Data */
+}]]></hook><hook type="C" class="\IPS\core\modules\admin\members\members" filename="adminCpMembers"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - Admin Members Hook
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+class hook1054 extends _HOOK_CLASS_
+{
+	/**
+	 * Edit Member
+	 *
+	 * @return	void
+	 */
+	public function edit()
+	{
+		try
+		{
+			\IPS\Member::loggedIn()->language()->words['group_desc'] = \IPS\Member::loggedIn()->language()->addToStack('wordpress_member_group_desc');
+	
+			if( \IPS\Settings::i()->wordpress_secondary_groups )
+			{
+				\IPS\Member::loggedIn()->language()->words['secondary_groups_desc'] = \IPS\Member::loggedIn()->language()->addToStack('wordpress_member_sgroup_desc');
+			}
+	
+			return parent::edit();
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+
+	/**
+	 * Login as member
+	 *
+	 * @return	void
+	 */
+	public function login()
+	{
+		try
+		{
+			\IPS\Dispatcher::i()->checkAcpPermission( 'member_login' );
+	
+			\IPS\Output::i()->error( 'wordpress_signin_as_notavailable', '2S100/1', 404, '' );
+		}
+		catch ( \RuntimeException $e )
+		{
+			if ( method_exists( get_parent_class(), __FUNCTION__ ) )
+			{
+				return call_user_func_array( 'parent::' . __FUNCTION__, func_get_args() );
+			}
+			else
+			{
+				throw $e;
+			}
+		}
+	}
+}]]></hook></hooks><settings><setting><key>wordpress_group_map</key><default/></setting><setting><key>wordpress_url</key><default/></setting><setting><key>wordpress_api_key</key><default/></setting><setting><key>wordpress_secondary_groups</key><default>0</default></setting></settings><settingsCode><![CDATA[//<?php
+
+/**
+ * WordPress SSO Settings
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+$form->addTab( 'wordpress_configuration' );
+
+/* Validator method for URL */
+$urlTest = function( $value )
+{
+	try
+	{
+		$response = \IPS\Http\Url::external( rtrim( $value, '/' ) . '/wp_api.php' )
+									->setQueryString( 'type', 'test' )
+									->request()
+									->get();
+
+		if( parse_url( $value, PHP_URL_SCHEME ) === 'https' AND parse_url( \IPS\Settings::i()->base_url, PHP_URL_SCHEME ) === 'http' )
+		{
+			throw new \InvalidArgumentException( 'wordpress_url_https' );
+		}
+
+		if( !in_array( $response->httpResponseCode, array( '200', '401' ) ) )
+		{
+			throw new \InvalidArgumentException( 'wordpress_api_notfound' );
+		}
+	}
+	catch( \IPS\Http\Request\Exception $e )
+	{
+		throw new \InvalidArgumentException( 'wordpress_url_connection_err' );
+	}
+};
+
+/* Validator method for API Key */
+$keyTest = function( $value )
+{
+	try
+	{
+		$response = \IPS\Http\Url::external( rtrim( \IPS\Request::i()->wordpress_url, '/' ) . '/wp_api.php' )
+									->setQueryString( array( 'type' => 'test', 'api_key' => $value ) )
+									->request()
+									->get();
+
+		if( !in_array( $response->httpResponseCode, array( '200' ) ) )
+		{
+			throw new \InvalidArgumentException( 'wordpress_api_key_wrong' );
+		}
+	}
+	catch( \IPS\Http\Request\Exception $e )
+	{
+		throw new \InvalidArgumentException( 'wordpress_url_connection_err' );
+	}
+};
+
+$form->add( new \IPS\Helpers\Form\Url( 'wordpress_url', \IPS\Settings::i()->wordpress_url, TRUE, array(), $urlTest ) );
+$form->add( new \IPS\Helpers\Form\Text( 'wordpress_api_key', \IPS\Settings::i()->wordpress_api_key ?: md5( uniqid() ), TRUE, array(), $keyTest ) );
+
+/* Don't show the mapping untill the settings are configured */
+if( \IPS\Settings::i()->wordpress_url and \IPS\Settings::i()->wordpress_url )
+{
+	try
+	{
+		/* Fetch WordPress Roles */
+		$wpRoles = \IPS\Http\Url::external( rtrim( \IPS\Settings::i()->wordpress_url, '/' ) . '/wp_api.php' )
+										->setQueryString( array( 'type' => 'roles', 'api_key' => \IPS\Settings::i()->wordpress_api_key ) )
+										->request()->get()->decodeJson( TRUE );
+
+		if( !$wpRoles )
+		{
+			throw new \RuntimeException;
+		}
+
+		$form->addTab( 'wordpress_roleMap' );
+		$form->addMessage( 'wordpress_roleMap_desc', 'ipsMessage ipsMessage_info' );
+
+		/* Unset Admin */
+		unset( $wpRoles['administrator'] );
+
+		/* Group Sync Matrix */
+		$groups = \IPS\Member\Group::groups();
+		$groupList = array();
+		foreach ( $groups as $group )
+		{
+			/* Don't map to Administrators */
+			if( $group->g_access_cp or $group->g_id == \IPS\Settings::i()->guest_group )
+			{
+				continue;
+			}
+
+			$groupList[ $group->g_id ] = $group->name;
+		}
+
+		$matrix = new \IPS\Helpers\Form\Matrix( 'matrix' );
+		$matrix->langPrefix = 'wordpress_';
+		$matrix->columns = array(
+			'role_remote'	=> function( $key, $value, $data ) use ( $wpRoles )
+			{
+				return new \IPS\Helpers\Form\Select( $key, $value ?: NULL, TRUE, array( 'options' => $wpRoles ) );
+			},
+			'group_local'	=> function( $key, $value, $data ) use ( $groupList )
+			{
+				return new \IPS\Helpers\Form\Select( $key, $value ?: \IPS\Settings::i()->member_group, TRUE, array( 'options' => $groupList ) );
+			}
+		);
+
+		/* Populate the default Matrix rows */
+		$warnings = '';
+		if ( $groupLinks = json_decode( \IPS\Settings::i()->wordpress_group_map, TRUE ) )
+		{
+			foreach ( $groupLinks as $remote => $local )
+			{
+				$matrix->rows[] = array(
+					'role_remote'	=> $remote,
+					'group_local'	=> $local
+				);
+
+				/* Check that the group exists */
+				if ( !isset( $groups[ $local ] ) )
+				{
+					$warnings .= \IPS\Theme::i()->getTemplate( 'global', 'core', 'global' )->message( \IPS\Member::loggedIn()->language()->addToStack( 'wordpress_invalid_group', FALSE, array( 'sprintf' => array( $remote ) ) ), 'warning' );
+				}
+			}
+		}
+
+		/* Add Warning notices */
+		if( $warnings )
+		{
+			$form->addHtml( $warnings );
+		}
+
+		$form->addMatrix( 'wordpressMatrix', $matrix );
+		$form->addMessage( 'wordpress_no_admins', 'ipsMessage ipsMessage_warning' );
+
+		$form->addHeader( 'wordpress_secondary_header' );
+		$form->addMessage( 'wordpress_secondary_warning', 'ipsMessage ipsMessage_error' );
+		$form->add( new \IPS\Helpers\Form\YesNo( 'wordpress_secondary_groups', \IPS\Settings::i()->wordpress_secondary_groups, TRUE ) );
+	}
+	catch( \RuntimeException $e ) { }
+}
+
+/* Save Settings */
+if ( $values = $form->values() )
+{
+	$groupValues = array();
+	if ( isset( $values['wordpressMatrix'] ) AND is_array( $values['wordpressMatrix'] ) )
+	{
+		foreach ( $values['wordpressMatrix'] as $group )
+		{
+			$groupValues[ $group['role_remote'] ] = $group['group_local'];
+		}
+		$values['wordpress_group_map'] = json_encode( $groupValues );
+	}
+
+	$form->saveAsSettings( $values );
+	return TRUE;
+}
+
+return $form;]]></settingsCode><tasks/><widgets/><htmlFiles/><cssFiles/><jsFiles/><resourcesFiles/><lang><word key="wordpress_group_map" js="0"><![CDATA[WordPress > IPS4 Group Map]]></word><word key="wordpress_group_map_desc" js="0">Key is the exact WordPress role name, Value is the IPS4 group ID</word><word key="wordpress_invalid_group" js="0">The `%s` role is assigned to a group that no longer exists, please check the group assignment</word><word key="wordpress_role_remote" js="0">WordPress Role</word><word key="wordpress_group_local" js="0">IPS4 Group</word><word key="wordpress_roleMap" js="0">Role Mapping</word><word key="wordpress_roleMap_desc" js="0"><![CDATA[To assign a group on login, select the WordPress role and select the group the user will be assigned to. <em>Roles that are not mapped will automatically be mapped to your default members group.</em>]]></word><word key="wordpress_configuration" js="0">General Configuration</word><word key="wordpress_url" js="0">WordPress URL</word><word key="wordpress_url_desc" js="0"><![CDATA[The full URL to your WordPress installation, i.e. <em>http://www.wordpress.org</em>]]></word><word key="wordpress_api_notfound" js="0">The wp_api.php file was not found at the specified URL.</word><word key="wordpress_api_key" js="0">API Key</word><word key="wordpress_api_key_desc" js="0">You will need to edit wp_api.php to insert this API Key. Please see the included instructions for more information.</word><word key="wordpress_api_key_wrong" js="0">The provided API Key was not valid, please make sure that it matches the one set in wp_api.php.</word><word key="wordpress_no_admins" js="0">This SSO will not assign any user to a user group that has AdminCP access.</word><word key="wordpress_url_connection_err" js="0">There was an error connecting to your WordPress URL, typically this is caused by the connection timing out. Check that your server can resolve your WordPress URL.</word><word key="wordpress_signin_as_notavailable" js="0">Unforunately, the `sign in as` functionality is not compatible with WordPress SSO.</word><word key="wordpress_url_https" js="0"><![CDATA[You are using HTTPS for WordPress, you <strong>MUST</strong> also use HTTPS for Invision Community [<a href="{external.https}" target="_blank">Learn More</a>]]]></word><word key="wordpress_secondary_header" js="0">Secondary Group Management</word><word key="wordpress_secondary_warning" js="0"><![CDATA[<strong>Notice:</strong> This is an advanced feature that allows the WordPress SSO to completely manage secondary group assignments in the event that you may use a WordPress plugin that allows users to have multiple roles. If you do not understand what this is, do not enable this setting since it will erase any manually assigned secondary groups upon login. <em>For example, this is useful if you use a plugin such as Memberium to provide access to various member levels as purchases.</em>]]></word><word key="wordpress_secondary_groups" js="0">Enable Secondary Group Management?</word><word key="wordpress_member_group_desc" js="0"><![CDATA[<span class="ipsType_warning">You are using WordPress SSO. Member groups will automatically be assigned according to your role map settings when members sign in.</span>]]></word><word key="wordpress_member_sgroup_desc" js="0"><![CDATA[<span class="ipsType_warning">You are using WordPress SSO with "Secondary Group Management" enabled. Secondary groups will automatically be assigned according to your role map settings when members sign in.</span>]]></word></lang><versions><version long="10000" human="1.0.0"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - Installer
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * Install Code
+ */
+class ips_plugins_setup_install
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		if( !\IPS\Db::i()->checkForColumn( 'core_members', 'wordpress_id' ) )
+		{
+			\IPS\Db::i()->addColumn( 'core_members',
+									array (
+											'name' => 'wordpress_id',
+											'type' => 'INT',
+											'length' => 10,
+											'decimals' => NULL,
+											'values' => array (),
+											'allow_null' => false,
+											'default' => '0',
+											'comment' => 'WordPress Account ID',
+										   )
+									);
+
+			\IPS\Db::i()->addIndex( 'core_members', array(
+				'type'			=> 'key',
+				'name'			=> 'wordpress_id',
+				'columns'		=> array( 'wordpress_id' )
+			) );
+		}
+
+		/* Generate an API Key */
+		$key = md5( md5( \IPS\Settings::i()->sql_user . microtime() ) . \IPS\Settings::i()->board_start );
+		\IPS\Db::i()->update( 'core_sys_conf_settings', array( 'conf_value' => $key ), array( 'conf_key=?', 'wordpress_api_key' ) );
+
+		return TRUE;
+	}
+}]]></version><version long="10001" human="1.0.1"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - IPS4
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.0.1 Upgrade Code
+ */
+class ips_plugins_setup_upg_10001
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version><version long="10002" human="1.0.2"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - IPS4
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.0.2 Upgrade Code
+ */
+class ips_plugins_setup_upg_10002
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version><version long="10003" human="1.0.3"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - IPS4
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.0.3 Upgrade Code
+ */
+class ips_plugins_setup_upg_10003
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version><version long="10004" human="1.0.4"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - IPS4
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.0.4 Upgrade Code
+ */
+class ips_plugins_setup_upg_10004
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version><version long="101000" human="1.1.0"><![CDATA[//<?php
+
+/**
+ * WordPress SSO - IPS4
+ *
+ * @author		Stuart Silvester
+ * @copyright	2017 - Stuart Silvester
+ * @link		http://ipb.silvesterwebdesigns.com
+ */
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.1.0 Upgrade Code
+ */
+class ips_plugins_setup_upg_101000
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version><version long="101001" human="1.1.1"><![CDATA[//<?php
+
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.1.1 Upgrade Code
+ */
+class ips_plugins_setup_upg_101001
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version><version long="101002" human="1.1.2"><![CDATA[//<?php
+
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.1.2 Upgrade Code
+ */
+class ips_plugins_setup_upg_101002
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		if( !\IPS\Db::i()->checkForColumn( 'core_members', 'wordpress_cookie' ) )
+		{
+			\IPS\Db::i()->addColumn( 'core_members',
+									array (
+											'name' => 'wordpress_cookie',
+											'type' => 'VARCHAR',
+											'length' => 32,
+											'decimals' => NULL,
+											'values' => array (),
+											'allow_null' => true,
+											'default' => NULL,
+											'comment' => 'WordPress Cookie Hash',
+										   )
+									);
+		}
+
+		return TRUE;
+	}
+}]]></version><version long="102000" human="1.2.0"><![CDATA[//<?php
+
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.2.0 Upgrade Code
+ */
+class ips_plugins_setup_upg_102000
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version><version long="102001" human="1.2.1"><![CDATA[//<?php
+
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.2.1 Upgrade Code
+ */
+class ips_plugins_setup_upg_102001
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version><version long="102002" human="1.2.2"><![CDATA[//<?php
+
+
+/* To prevent PHP errors (extending class does not exist) revealing path */
+if ( !defined( '\IPS\SUITE_UNIQUE_KEY' ) )
+{
+	header( ( isset( $_SERVER['SERVER_PROTOCOL'] ) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0' ) . ' 403 Forbidden' );
+	exit;
+}
+
+/**
+ * 1.2.2 Upgrade Code
+ */
+class ips_plugins_setup_upg_102002
+{
+	/**
+	 * ...
+	 *
+	 * @return	array	If returns TRUE, upgrader will proceed to next step. If it returns any other value, it will set this as the value of the 'extra' GET parameter and rerun this step (useful for loops)
+	 */
+	public function step1()
+	{
+		
+
+		return TRUE;
+	}
+	
+	// You can create as many additional methods (step2, step3, etc.) as is necessary.
+	// Each step will be executed in a new HTTP request
+}]]></version></versions></plugin>
