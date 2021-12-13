@@ -13,5 +13,10 @@ Instalation:
 
 /**Enable Cookies*/
 define('COOKIE_DOMAIN', $_SERVER['HTTP_HOST'] );
+/* developers */ 
+define( 'WP_ALLOW_REPAIR', false );
+define( 'WP_DEBUG', true );
+define( 'WP_DEBUG_LOG', true );
+define( 'WP_DEBUG_DISPLAY', false );
 
 - done!
