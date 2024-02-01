@@ -11,10 +11,12 @@ Instalation:
 - add the plugin in IPB/IPS
 - add script in wordpress configuration for cookies.
 
-<center>
+Add this code in "wp-config.php"
+```php
 /**Enable Cookies*/
 define('COOKIE_DOMAIN', $_SERVER['HTTP_HOST'] );
-</center>
+define( 'COOKIE_DOMAIN', '.your-site.com' );
+``` 
 
 - done!
 The script works and does not need a monthly update to continue its work. It allows the integration that connects the two accounts via an API.
