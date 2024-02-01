@@ -17,3 +17,5 @@ define('COOKIE_DOMAIN', $_SERVER['HTTP_HOST'] );
 </center>
 
 - done!
+The script works and does not need a monthly update to continue its work. It allows the integration that connects the two accounts via an API.
+If you need help, join my >> Discord.BG-GAMER.com << Discord server! 
