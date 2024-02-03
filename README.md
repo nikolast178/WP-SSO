@@ -1,3 +1,4 @@
+<img src="https://forum.bg-gamer.com/uploads/monthly_2024_02/Screenshot2024-02-01121539.png.ef0a0d143dead901b45bdd01485321dc.png" alt="Girl in a jacket" width="700" height="400">
 <p dir="auto" style="text-align: center;">
 	<br>
 	<span style="font-size:16px;"><strong>Requirements:</strong></span>
