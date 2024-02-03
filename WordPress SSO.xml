@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<plugin name="WordPress SSO" version_long="102002" version_human="1.2.2" author="Stuart Silvester" website="http://ipb.silvesterwebdesigns.com" update_check="http://ipb.silvesterwebdesigns.com/update-check/?app=wordpress"><hooks><hook type="C" class="\IPS\Member" filename="member"><![CDATA[//<?php
+<plugin name="WordPress SSO" version_long="103002" version_human="1.3.2" author="The Necrotic" website="https://forum.bg-gamer.com/files/file/10-wordpress-ips-sso/" update_check="https://forum.bg-gamer.com/files/file/10-wordpress-ips-sso/"><hooks><hook type="C" class="\IPS\Member" filename="member"><![CDATA[//<?php
 
 /**
- * WordPress SSO API for IPS
- * BG-GAMER
+ * WordPress SSO - IPS4
+ *
+ * @author		The Necrotic
+ * @link		http://forum.bg-gamer.com
  */
 
 class hook154 extends _HOOK_CLASS_
@@ -830,7 +832,7 @@ public static function hookData() {
 {{else}}
 <li id=\'elSignInLink\'>
   <a href=\'{url="app=core&module=system&controller=login" seoTemplate="login" protocol="\IPS\Settings::i()->logins_over_https"}\' data-ipsMenu-closeOnClick="false" data-ipsMenu id=\'elUserSignIn\'>
-    {lang="sign_in"}  <i class=\'fa fa-caret-down\'></i>
+    {lang="sign_in"} Â <i class=\'fa fa-caret-down\'></i>
   </a>
   {template="loginPopup" app="core" group="global" params="new \IPS\Login( \IPS\Http\Url::internal( \'app=core&module=system&controller=login\', \'front\', \'login\', NULL, \IPS\Settings::i()->logins_over_https ) )"}
 </li>
